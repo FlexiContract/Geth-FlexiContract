@@ -31,6 +31,8 @@ func (obj *StateAccount) EncodeRLP(_w io.Writer) error {
 	w.ListEnd(_tmp1)
 	w.WriteUint64(obj.ProposalNumber)
 	w.WriteUint64(obj.VotesNeededTowin)
+	w.WriteUint64(obj.TimeOut)
+	w.WriteUint64(obj.VotesNeededToDeactivate)
 	w.ListEnd(_tmp0)
 	return w.Flush()
 }

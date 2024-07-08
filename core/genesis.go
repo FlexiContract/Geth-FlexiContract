@@ -133,12 +133,18 @@ func (ga *GenesisAlloc) deriveHash() (common.Hash, error) {
 		statedb.SetStakeholders(addr, account.Stakeholders)
 		statedb.SetProposalNumber(addr, account.ProposalNumber)
 		statedb.SetVotesNeededToWin(addr, account.VotesNeededToWin)
+		statedb.SetVotesNeededToDeactivate(addr, account.VotesNeededToDeactivate)
+		statedb.SetTimeOut(addr, account.TimeOut)
 		for key, value := range account.Storage {
 			statedb.SetState(addr, key, value)
 		}
 
 		for proposalNumber, genesisProposal := range account.Proposals {
-			proposal := types.Proposal{InFavourOf: genesisProposal.InFavourOf, Against: genesisProposal.Against, Stakeholders: genesisProposal.Stakeholders, VotesNeededToWin: genesisProposal.VotesNeededToWin, CurrentState: genesisProposal.CurrentState, ProposedCodeHash: crypto.Keccak256(genesisProposal.ProposedCode)}
+			blockNumber := genesisProposal.BlockNumber
+			if blockNumber == nil {
+				blockNumber = new(big.Int)
+			}
+			proposal := types.Proposal{InFavourOf: genesisProposal.InFavourOf, Against: genesisProposal.Against, Stakeholders: genesisProposal.Stakeholders, VotesNeededToWin: genesisProposal.VotesNeededToWin, TimeOut: genesisProposal.TimeOut, VotesNeededToDeactivate: genesisProposal.VotesNeededToDeactivate, BlockNumber: blockNumber, CurrentState: genesisProposal.CurrentState, ProposedCodeHash: crypto.Keccak256(genesisProposal.ProposedCode)}
 			statedb.SetProposal(addr, proposalNumber, proposal)
 			for voterAddress, genesisVote := range genesisProposal.Votes {
 				vote := types.Vote{Type: genesisVote.Type, TxHash: genesisVote.TxHash}
@@ -164,12 +170,18 @@ func (ga *GenesisAlloc) flush(db ethdb.Database, triedb *trie.Database, blockhas
 		statedb.SetStakeholders(addr, account.Stakeholders)
 		statedb.SetProposalNumber(addr, account.ProposalNumber)
 		statedb.SetVotesNeededToWin(addr, account.VotesNeededToWin)
+		statedb.SetVotesNeededToDeactivate(addr, account.VotesNeededToDeactivate)
+		statedb.SetTimeOut(addr, account.TimeOut)
 		for key, value := range account.Storage {
 			statedb.SetState(addr, key, value)
 		}
 
 		for proposalNumber, genesisProposal := range account.Proposals {
-			proposal := types.Proposal{InFavourOf: genesisProposal.InFavourOf, Against: genesisProposal.Against, Stakeholders: genesisProposal.Stakeholders, VotesNeededToWin: genesisProposal.VotesNeededToWin, CurrentState: genesisProposal.CurrentState, ProposedCodeHash: crypto.Keccak256(genesisProposal.ProposedCode)}
+			blockNumber := genesisProposal.BlockNumber
+			if blockNumber == nil {
+				blockNumber = new(big.Int)
+			}
+			proposal := types.Proposal{InFavourOf: genesisProposal.InFavourOf, Against: genesisProposal.Against, Stakeholders: genesisProposal.Stakeholders, VotesNeededToWin: genesisProposal.VotesNeededToWin, VotesNeededToDeactivate: genesisProposal.VotesNeededToDeactivate, BlockNumber: blockNumber, TimeOut: genesisProposal.TimeOut, CurrentState: genesisProposal.CurrentState, ProposedCodeHash: crypto.Keccak256(genesisProposal.ProposedCode)}
 			statedb.SetProposal(addr, proposalNumber, proposal)
 			for voterAddress, genesisVote := range genesisProposal.Votes {
 				vote := types.Vote{Type: genesisVote.Type, TxHash: genesisVote.TxHash}
@@ -236,25 +248,30 @@ func CommitGenesisState(db ethdb.Database, triedb *trie.Database, hash common.Ha
 
 // GenesisAccount is an account in the state of the genesis block.
 type GenesisAccount struct {
-	ProposalNumber   uint64                      `json:"proposalnumber,omitempty"`
-	VotesNeededToWin uint64                      `json:"votesneededtowin,omitempty"`
-	Code             []byte                      `json:"code,omitempty"`
-	Storage          map[common.Hash]common.Hash `json:"storage,omitempty"`
-	Balance          *big.Int                    `json:"balance" gencodec:"required"`
-	Nonce            uint64                      `json:"nonce,omitempty"`
-	Stakeholders     []common.Address            `json:"stakeholders,omitempty"`
-	Proposals        map[uint64]GenesisProposal  `json:"proposals,omitempty"`
-	PrivateKey       []byte                      `json:"secretKey,omitempty"` // for tests
+	ProposalNumber          uint64                      `json:"proposalnumber,omitempty"`
+	VotesNeededToWin        uint64                      `json:"votesneededtowin,omitempty"`
+	VotesNeededToDeactivate uint64                      `json:"votesneededtodeactivate,omitempty"`
+	TimeOut                 uint64                      `json:"timeout,omitempty"`
+	Code                    []byte                      `json:"code,omitempty"`
+	Storage                 map[common.Hash]common.Hash `json:"storage,omitempty"`
+	Balance                 *big.Int                    `json:"balance" gencodec:"required"`
+	Nonce                   uint64                      `json:"nonce,omitempty"`
+	Stakeholders            []common.Address            `json:"stakeholders,omitempty"`
+	Proposals               map[uint64]GenesisProposal  `json:"proposals,omitempty"`
+	PrivateKey              []byte                      `json:"secretKey,omitempty"` // for tests
 }
 
 type GenesisProposal struct {
-	InFavourOf       uint64                         `json:"infavourof" gencodec:"required"`
-	Against          uint64                         `json:"against" gencodec:"required"`
-	Stakeholders     []common.Address               `json:"stakeholders" gencodec:"required"`
-	VotesNeededToWin uint64                         `json:"votesneededtowin" gencodec:"required"`
-	ProposedCode     []byte                         `json:"proposedcode" gencodec:"required"`
-	CurrentState     uint8                          `json:"currentstate" gencodec:"required"`
-	Votes            map[common.Address]GenesisVote `json:"votes,omitempty"`
+	InFavourOf              uint64                         `json:"infavourof" gencodec:"required"`
+	Against                 uint64                         `json:"against" gencodec:"required"`
+	Stakeholders            []common.Address               `json:"stakeholders" gencodec:"required"`
+	VotesNeededToWin        uint64                         `json:"votesneededtowin" gencodec:"required"`
+	BlockNumber             *big.Int                       `json:"blocknumber" gencodec:"required"`
+	TimeOut                 uint64                         `json:"timeout" gencodec:"required"`
+	VotesNeededToDeactivate uint64                         `json:"votesneededtodeactivate" gencodec:"required"`
+	ProposedCode            []byte                         `json:"proposedcode" gencodec:"required"`
+	CurrentState            uint8                          `json:"currentstate" gencodec:"required"`
+	Votes                   map[common.Address]GenesisVote `json:"votes,omitempty"`
 }
 
 type GenesisVote struct {

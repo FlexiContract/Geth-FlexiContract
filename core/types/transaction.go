@@ -90,7 +90,8 @@ type TxData interface {
 	stakeholders() []common.Address
 	proposalNumber() uint64
 	votesNeededToWin() uint64
-
+	timeOut() uint64
+	votesNeededToDeactivate() uint64
 	rawSignatureValues() (v, r, s *big.Int)
 	setSignatureValues(chainID, v, r, s *big.Int)
 }
@@ -291,6 +292,10 @@ func (tx *Transaction) Stakeholders() []common.Address { return tx.inner.stakeho
 func (tx *Transaction) ProposalNumber() uint64 { return tx.inner.proposalNumber() }
 
 func (tx *Transaction) VotesNeededToWin() uint64 { return tx.inner.votesNeededToWin() }
+
+func (tx *Transaction) TimeOut() uint64 { return tx.inner.timeOut() }
+
+func (tx *Transaction) VotesNeededToDeactivate() uint64 { return tx.inner.votesNeededToDeactivate() }
 
 // Gas returns the gas limit of the transaction.
 func (tx *Transaction) Gas() uint64 { return tx.inner.gas() }
@@ -616,25 +621,27 @@ func (t *TransactionsByPriceAndNonce) Pop() {
 //
 // NOTE: In a future PR this will be removed.
 type Message struct {
-	to               *common.Address
-	from             common.Address
-	nonce            uint64
-	amount           *big.Int
-	gasLimit         uint64
-	gasPrice         *big.Int
-	gasFeeCap        *big.Int
-	gasTipCap        *big.Int
-	data             []byte
-	accessList       AccessList
-	reorgList        ReorgList
-	dataTypes        DataTypes
-	isFake           bool
-	isUpdate         bool
-	isApproveVote    bool
-	isRejectVote     bool
-	stakeholders     []common.Address
-	proposalNumber   uint64
-	votesNeededToWin uint64
+	to                      *common.Address
+	from                    common.Address
+	nonce                   uint64
+	amount                  *big.Int
+	gasLimit                uint64
+	gasPrice                *big.Int
+	gasFeeCap               *big.Int
+	gasTipCap               *big.Int
+	data                    []byte
+	accessList              AccessList
+	reorgList               ReorgList
+	dataTypes               DataTypes
+	isFake                  bool
+	isUpdate                bool
+	isApproveVote           bool
+	isRejectVote            bool
+	stakeholders            []common.Address
+	proposalNumber          uint64
+	votesNeededToWin        uint64
+	timeOut                 uint64
+	votesNeededToDeactivate uint64
 }
 
 func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice, gasFeeCap, gasTipCap *big.Int, data []byte, accessList AccessList, isFake bool) Message {
@@ -692,15 +699,15 @@ func UniqueReorgList(reorgInfos []ReorgInfo) []ReorgInfo {
 
 func UniqueDataTypes(dataTypes []DataType) []DataType {
 
-	seen := make(map[DataType]bool)
+	seen := make(map[string]bool)
 
 	uniqueDataTypes := make([]DataType, 0)
 
 	for _, dataType := range dataTypes {
 		// If the element is not seen yet, add it to the unique list and mark it as seen
-		if _, exists := seen[dataType]; !exists {
+		if _, exists := seen[dataType.Type]; !exists {
 			uniqueDataTypes = append(uniqueDataTypes, dataType)
-			seen[dataType] = true
+			seen[dataType.Type] = true
 		}
 	}
 
@@ -710,24 +717,26 @@ func UniqueDataTypes(dataTypes []DataType) []DataType {
 // AsMessage returns the transaction as a core.Message.
 func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 	msg := Message{
-		nonce:            tx.Nonce(),
-		gasLimit:         tx.Gas(),
-		gasPrice:         new(big.Int).Set(tx.GasPrice()),
-		gasFeeCap:        new(big.Int).Set(tx.GasFeeCap()),
-		gasTipCap:        new(big.Int).Set(tx.GasTipCap()),
-		to:               tx.To(),
-		amount:           tx.Value(),
-		data:             tx.Data(),
-		accessList:       tx.AccessList(),
-		reorgList:        tx.ReorgList(),
-		dataTypes:        tx.DataTypes(),
-		stakeholders:     tx.Stakeholders(),
-		proposalNumber:   tx.ProposalNumber(),
-		votesNeededToWin: tx.VotesNeededToWin(),
-		isFake:           false,
-		isApproveVote:    tx.Type() == ApproveProposalTxType,
-		isRejectVote:     tx.Type() == RejectProposalTxType,
-		isUpdate:         tx.Type() == SmartContractUpdateTxType,
+		nonce:                   tx.Nonce(),
+		gasLimit:                tx.Gas(),
+		gasPrice:                new(big.Int).Set(tx.GasPrice()),
+		gasFeeCap:               new(big.Int).Set(tx.GasFeeCap()),
+		gasTipCap:               new(big.Int).Set(tx.GasTipCap()),
+		to:                      tx.To(),
+		amount:                  tx.Value(),
+		data:                    tx.Data(),
+		accessList:              tx.AccessList(),
+		reorgList:               tx.ReorgList(),
+		dataTypes:               tx.DataTypes(),
+		stakeholders:            tx.Stakeholders(),
+		proposalNumber:          tx.ProposalNumber(),
+		votesNeededToWin:        tx.VotesNeededToWin(),
+		timeOut:                 tx.TimeOut(),
+		votesNeededToDeactivate: tx.VotesNeededToDeactivate(),
+		isFake:                  false,
+		isApproveVote:           tx.Type() == ApproveProposalTxType,
+		isRejectVote:            tx.Type() == RejectProposalTxType,
+		isUpdate:                tx.Type() == SmartContractUpdateTxType,
 	}
 	// If baseFee provided, set gasPrice to effectiveGasPrice.
 	if baseFee != nil {
@@ -738,25 +747,27 @@ func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 	return msg, err
 }
 
-func (m Message) From() common.Address           { return m.from }
-func (m Message) To() *common.Address            { return m.to }
-func (m Message) GasPrice() *big.Int             { return m.gasPrice }
-func (m Message) GasFeeCap() *big.Int            { return m.gasFeeCap }
-func (m Message) GasTipCap() *big.Int            { return m.gasTipCap }
-func (m Message) Value() *big.Int                { return m.amount }
-func (m Message) Gas() uint64                    { return m.gasLimit }
-func (m Message) Nonce() uint64                  { return m.nonce }
-func (m Message) Data() []byte                   { return m.data }
-func (m Message) AccessList() AccessList         { return m.accessList }
-func (m Message) ReorgList() ReorgList           { return m.reorgList }
-func (m Message) DataTypes() DataTypes           { return m.dataTypes }
-func (m Message) IsFake() bool                   { return m.isFake }
-func (m Message) IsUpdate() bool                 { return m.isUpdate }
-func (m Message) IsApproveVote() bool            { return m.isApproveVote }
-func (m Message) IsRejectVote() bool             { return m.isRejectVote }
-func (m Message) Stakeholders() []common.Address { return m.stakeholders }
-func (m Message) ProposalNumber() uint64         { return m.proposalNumber }
-func (m Message) VotesNeededToWin() uint64       { return m.votesNeededToWin }
+func (m Message) From() common.Address            { return m.from }
+func (m Message) To() *common.Address             { return m.to }
+func (m Message) GasPrice() *big.Int              { return m.gasPrice }
+func (m Message) GasFeeCap() *big.Int             { return m.gasFeeCap }
+func (m Message) GasTipCap() *big.Int             { return m.gasTipCap }
+func (m Message) Value() *big.Int                 { return m.amount }
+func (m Message) Gas() uint64                     { return m.gasLimit }
+func (m Message) Nonce() uint64                   { return m.nonce }
+func (m Message) Data() []byte                    { return m.data }
+func (m Message) AccessList() AccessList          { return m.accessList }
+func (m Message) ReorgList() ReorgList            { return m.reorgList }
+func (m Message) DataTypes() DataTypes            { return m.dataTypes }
+func (m Message) IsFake() bool                    { return m.isFake }
+func (m Message) IsUpdate() bool                  { return m.isUpdate }
+func (m Message) IsApproveVote() bool             { return m.isApproveVote }
+func (m Message) IsRejectVote() bool              { return m.isRejectVote }
+func (m Message) Stakeholders() []common.Address  { return m.stakeholders }
+func (m Message) ProposalNumber() uint64          { return m.proposalNumber }
+func (m Message) VotesNeededToWin() uint64        { return m.votesNeededToWin }
+func (m Message) TimeOut() uint64                 { return m.timeOut }
+func (m Message) VotesNeededToDeactivate() uint64 { return m.votesNeededToDeactivate }
 
 // copyAddressPtr copies an address.
 func copyAddressPtr(a *common.Address) *common.Address {

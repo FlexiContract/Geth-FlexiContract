@@ -45,6 +45,7 @@ var (
 	ErrNotExecutable                = errors.New("Not executable at the moment")
 	ErrNotAcceptingVotes            = errors.New("Not accepting votes")
 	ErrDuplicateVote                = errors.New("Duplicate vote")
+	ErrProposalParamMismatch        = errors.New("Proposal parameters don't match")
 	// errStopToken is an internal token indicating interpreter loop termination,
 	// never returned to outside callers.
 	errStopToken = errors.New("stop token")

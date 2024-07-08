@@ -48,9 +48,11 @@ type txJSON struct {
 	ReorgList  *ReorgList   `json:"reorgList,omitempty"`
 	DataTypes  *DataTypes   `json:"dataTypes,omitempty"`
 	//Smart contract update transaction fields
-	Stakeholders     *[]common.Address `json:"stakeholders,omitempty"`
-	ProposalNumber   *hexutil.Uint64   `json:"proposalnumber,omitempty"`
-	VotesNeededToWin *hexutil.Uint64   `json:"votesneededtowin,omitempty"`
+	Stakeholders            *[]common.Address `json:"stakeholders,omitempty"`
+	ProposalNumber          *hexutil.Uint64   `json:"proposalnumber,omitempty"`
+	VotesNeededToWin        *hexutil.Uint64   `json:"votesneededtowin,omitempty"`
+	TimeOut                 *hexutil.Uint64   `json:"timeout,omitempty"`
+	VotesNeededToDeactivate *hexutil.Uint64   `json:"votesneededtodeactivate,omitempty"`
 
 	// Only used for encoding:
 	Hash common.Hash `json:"hash"`
@@ -109,6 +111,8 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		enc.Nonce = (*hexutil.Uint64)(&itx.Nonce)
 		enc.ProposalNumber = (*hexutil.Uint64)(&itx.ProposalNumber)
 		enc.VotesNeededToWin = (*hexutil.Uint64)(&itx.VotesNeededToWin)
+		enc.TimeOut = (*hexutil.Uint64)(&itx.TimeOut)
+		enc.VotesNeededToDeactivate = (*hexutil.Uint64)(&itx.VotesNeededToDeactivate)
 		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
 		enc.GasPrice = (*hexutil.Big)(itx.GasPrice)
 		enc.Value = (*hexutil.Big)(itx.Value)
@@ -126,6 +130,8 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		enc.Nonce = (*hexutil.Uint64)(&itx.Nonce)
 		enc.ProposalNumber = (*hexutil.Uint64)(&itx.ProposalNumber)
 		enc.VotesNeededToWin = (*hexutil.Uint64)(&itx.VotesNeededToWin)
+		enc.TimeOut = (*hexutil.Uint64)(&itx.TimeOut)
+		enc.VotesNeededToDeactivate = (*hexutil.Uint64)(&itx.VotesNeededToDeactivate)
 		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
 		enc.GasPrice = (*hexutil.Big)(itx.GasPrice)
 		enc.Value = (*hexutil.Big)(itx.Value)
@@ -143,6 +149,8 @@ func (tx *Transaction) MarshalJSON() ([]byte, error) {
 		enc.Nonce = (*hexutil.Uint64)(&itx.Nonce)
 		enc.ProposalNumber = (*hexutil.Uint64)(&itx.ProposalNumber)
 		enc.VotesNeededToWin = (*hexutil.Uint64)(&itx.VotesNeededToWin)
+		enc.TimeOut = (*hexutil.Uint64)(&itx.TimeOut)
+		enc.VotesNeededToDeactivate = (*hexutil.Uint64)(&itx.VotesNeededToDeactivate)
 		enc.Gas = (*hexutil.Uint64)(&itx.Gas)
 		enc.GasPrice = (*hexutil.Big)(itx.GasPrice)
 		enc.Value = (*hexutil.Big)(itx.Value)
@@ -357,6 +365,16 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 		}
 		itx.VotesNeededToWin = uint64(*dec.VotesNeededToWin)
 
+		if dec.TimeOut == nil {
+			return errors.New("missing required field 'timeout' in transaction")
+		}
+		itx.TimeOut = uint64(*dec.TimeOut)
+
+		if dec.VotesNeededToDeactivate == nil {
+			return errors.New("missing required field 'votesneededtodeactivate' in transaction")
+		}
+		itx.VotesNeededToDeactivate = uint64(*dec.VotesNeededToDeactivate)
+
 		if dec.GasPrice == nil {
 			return errors.New("missing required field 'gasPrice' in transaction")
 		}
@@ -429,6 +447,16 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 		}
 		itx.VotesNeededToWin = uint64(*dec.VotesNeededToWin)
 
+		if dec.TimeOut == nil {
+			return errors.New("missing required field 'timeout' in transaction")
+		}
+		itx.TimeOut = uint64(*dec.TimeOut)
+
+		if dec.VotesNeededToDeactivate == nil {
+			return errors.New("missing required field 'votesneededtodeactivate' in transaction")
+		}
+		itx.VotesNeededToDeactivate = uint64(*dec.VotesNeededToDeactivate)
+
 		if dec.GasPrice == nil {
 			return errors.New("missing required field 'gasPrice' in transaction")
 		}
@@ -500,6 +528,16 @@ func (tx *Transaction) UnmarshalJSON(input []byte) error {
 			return errors.New("missing required field 'votesneededtowin' in transaction")
 		}
 		itx.VotesNeededToWin = uint64(*dec.VotesNeededToWin)
+
+		if dec.TimeOut == nil {
+			return errors.New("missing required field 'timeout' in transaction")
+		}
+		itx.TimeOut = uint64(*dec.TimeOut)
+
+		if dec.VotesNeededToDeactivate == nil {
+			return errors.New("missing required field 'votesneededtodeactivate' in transaction")
+		}
+		itx.VotesNeededToDeactivate = uint64(*dec.VotesNeededToDeactivate)
 
 		if dec.GasPrice == nil {
 			return errors.New("missing required field 'gasPrice' in transaction")

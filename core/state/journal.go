@@ -139,6 +139,14 @@ type (
 		account *common.Address
 		prev    uint64
 	}
+	votesNeededToDeactivateChange struct {
+		account *common.Address
+		prev    uint64
+	}
+	timeOutChange struct {
+		account *common.Address
+		prev    uint64
+	}
 	// Changes to other state values.
 	refundChange struct {
 		prev uint64
@@ -237,6 +245,22 @@ func (ch votesNeededToWinChange) revert(s *StateDB) {
 }
 
 func (ch votesNeededToWinChange) dirtied() *common.Address {
+	return ch.account
+}
+
+func (ch votesNeededToDeactivateChange) revert(s *StateDB) {
+	s.getStateObject(*ch.account).setVotesNeededToDeactivate(ch.prev)
+}
+
+func (ch votesNeededToDeactivateChange) dirtied() *common.Address {
+	return ch.account
+}
+
+func (ch timeOutChange) revert(s *StateDB) {
+	s.getStateObject(*ch.account).setTimeOut(ch.prev)
+}
+
+func (ch timeOutChange) dirtied() *common.Address {
 	return ch.account
 }
 

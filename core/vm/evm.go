@@ -18,6 +18,7 @@ package vm
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math/big"
 	"sync/atomic"
@@ -26,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/holiman/uint256"
 )
 
@@ -225,12 +227,28 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 			ret, err = nil, nil // gas is unchanged
 		} else {
 			executable := true
-			currentProposlaNumber := evm.StateDB.GetProposalNumber(addr)
-			if currentProposlaNumber != 0 {
-				currentState := evm.StateDB.GetProposal(addr, currentProposlaNumber).CurrentState
+			currentProposalNumber := evm.StateDB.GetProposalNumber(addr)
+			if currentProposalNumber != 0 {
+				currentState := evm.StateDB.GetProposal(addr, currentProposalNumber).CurrentState
 				if currentState != types.ChangesApplied && currentState != types.ProposalRejected {
+					var isTimedOut bool
+					finalValidBlockNumber := new(big.Int)
+					finalValidBlockNumber.Add(evm.StateDB.GetProposal(addr, currentProposalNumber).BlockNumber, new(big.Int).SetUint64(evm.StateDB.GetTimeOut(addr)))
 
-					ret, err, executable = nil, ErrNotExecutable, false
+					if finalValidBlockNumber.Cmp(evm.Context.BlockNumber) < 0 {
+
+						isTimedOut = true
+					} else {
+						isTimedOut = false
+					}
+					if !isTimedOut {
+						votesNeededToDeactivate := evm.StateDB.GetVotesNeededToDeactivate(addr)
+						if votesNeededToDeactivate >= evm.StateDB.GetProposal(addr, currentProposalNumber).InFavourOf {
+
+							ret, err, executable = nil, ErrNotExecutable, false
+						}
+					}
+
 				}
 			}
 
@@ -468,6 +486,8 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 
 	evm.StateDB.SetProposalNumber(address, 0)
 	evm.StateDB.SetVotesNeededToWin(address, 0)
+	evm.StateDB.SetVotesNeededToDeactivate(address, 0)
+	evm.StateDB.SetTimeOut(address, 0)
 	evm.StateDB.SetStakeholders(address, make([]common.Address, 0))
 
 	ret, err := evm.interpreter.Run(contract, nil, false)
@@ -515,7 +535,7 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	return ret, address, contract.Gas, err
 }
 
-func (evm *EVM) updatableCreate(caller ContractRef, codeAndHash *codeAndHash, gas uint64, value *big.Int, address common.Address, stakeholders []common.Address, votesNeededToWin uint64, typ OpCode) ([]byte, common.Address, uint64, error) {
+func (evm *EVM) updatableCreate(caller ContractRef, codeAndHash *codeAndHash, gas uint64, value *big.Int, address common.Address, stakeholders []common.Address, votesNeededToWin uint64, votesNeededToDeactivate uint64, timeOut uint64, typ OpCode) ([]byte, common.Address, uint64, error) {
 	// Depth check execution. Fail if we're trying to execute above the
 	// limit.
 	if evm.depth > int(params.CallCreateDepth) {
@@ -543,6 +563,10 @@ func (evm *EVM) updatableCreate(caller ContractRef, codeAndHash *codeAndHash, ga
 	if votesNeededToWin > uint64(len(stakeholders)) {
 		return nil, common.Address{}, 0, ErrInvalidProposal
 	}
+
+	if votesNeededToDeactivate > votesNeededToWin {
+		return nil, common.Address{}, 0, ErrInvalidProposal
+	}
 	// Create a new account on the state
 	snapshot := evm.StateDB.Snapshot()
 	evm.StateDB.CreateAccount(address)
@@ -553,6 +577,8 @@ func (evm *EVM) updatableCreate(caller ContractRef, codeAndHash *codeAndHash, ga
 
 	evm.StateDB.SetProposalNumber(address, 0)
 	evm.StateDB.SetVotesNeededToWin(address, votesNeededToWin)
+	evm.StateDB.SetVotesNeededToDeactivate(address, votesNeededToDeactivate)
+	evm.StateDB.SetTimeOut(address, timeOut)
 	evm.StateDB.SetStakeholders(address, stakeholders)
 
 	// Initialise a new contract and set the code that is to be used by the EVM.
@@ -630,9 +656,9 @@ func (evm *EVM) Create2(caller ContractRef, code []byte, gas uint64, endowment *
 	return evm.create(caller, codeAndHash, gas, endowment, contractAddr, CREATE2)
 }
 
-func (evm *EVM) UpdatableCreate(caller ContractRef, code []byte, gas uint64, value *big.Int, stakeholders []common.Address, votesNeededToWin uint64) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
+func (evm *EVM) UpdatableCreate(caller ContractRef, code []byte, gas uint64, value *big.Int, stakeholders []common.Address, votesNeededToWin uint64, votesNeededToDeactivate uint64, timeOut uint64) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
 	contractAddr = crypto.CreateAddress(caller.Address(), evm.StateDB.GetNonce(caller.Address()))
-	return evm.updatableCreate(caller, &codeAndHash{code: code}, gas, value, contractAddr, stakeholders, votesNeededToWin, CREATE)
+	return evm.updatableCreate(caller, &codeAndHash{code: code}, gas, value, contractAddr, stakeholders, votesNeededToWin, votesNeededToDeactivate, timeOut, CREATE)
 }
 
 func IsStakeholder(addr common.Address, stakeholders []common.Address) bool {
@@ -647,7 +673,7 @@ func IsStakeholder(addr common.Address, stakeholders []common.Address) bool {
 	return false
 }
 
-func (evm *EVM) update(caller ContractRef, codeAndHash *codeAndHash, gas uint64, value *big.Int, address common.Address, stakeholders []common.Address, votesNeededToWin uint64, proposalNumber uint64, reorgList []types.ReorgInfo, dataTypes []types.DataType) ([]byte, uint64, error) {
+func (evm *EVM) update(caller ContractRef, codeAndHash *codeAndHash, gas uint64, value *big.Int, address common.Address, stakeholders []common.Address, votesNeededToWin uint64, timeout uint64, votesNeededToDeactivate uint64, proposalNumber uint64, reorgList []types.ReorgInfo, dataTypes []types.DataType) ([]byte, uint64, error) {
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
 	}
@@ -679,16 +705,27 @@ func (evm *EVM) update(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 
 	currentProposalNumber := evm.StateDB.GetProposalNumber(address)
 	var currentState uint8
+	var isTimedOut bool
 	if currentProposalNumber == 0 {
 		currentState = types.ChangesApplied
+		isTimedOut = false
 	} else {
 		currentState = evm.StateDB.GetProposal(address, currentProposalNumber).CurrentState
+		finalValidBlockNumber := new(big.Int)
+		finalValidBlockNumber.Add(evm.StateDB.GetProposal(address, currentProposalNumber).BlockNumber, new(big.Int).SetUint64(evm.StateDB.GetTimeOut(address)))
+
+		if finalValidBlockNumber.Cmp(evm.Context.BlockNumber) < 0 {
+
+			isTimedOut = true
+		} else {
+			isTimedOut = false
+		}
 	}
 
 	if proposalNumber > currentProposalNumber+1 || proposalNumber < currentProposalNumber {
 		return nil, 0, ErrInvalidProposalNumber
 	} else if currentProposalNumber == proposalNumber {
-		if currentState == types.ProposalPassed {
+		if currentState == types.ProposalPassed && !isTimedOut {
 
 			currentProposal := evm.StateDB.GetProposal(address, currentProposalNumber)
 
@@ -732,20 +769,23 @@ func (evm *EVM) update(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 			fmt.Println("Starting to print slots")
 			slots := evm.StateDB.GetStorageAsMap(address)
 			for key, val := range slots {
+				gas -= 100
 				fmt.Println(key.Hex())
 				fmt.Println(val.Hex())
 			}
 			fmt.Println("Slot Printing over")
-			reorganizer := NewStorageReorganizer(address, evm.StateDB)
-			reorganizer.Init(slots, reorgList, dataTypes)
+			reorganizer := NewStorageReorganizer(address, evm.StateDB, gas)
+			reorgErr := reorganizer.Init(slots, reorgList, dataTypes)
 
 			var ret []byte
 			var err error
-			reorgErr := reorganizer.Reorganize()
+			reorgErr = reorganizer.Reorganize()
+			reorgErr = reorganizer.IsCommitPossible()
 
 			if reorgErr == nil {
 
 				fmt.Println("No error in reorganizing")
+				contract.Gas = reorganizer.gas
 				ret, err = evm.interpreter.Run(contract, nil, false)
 			}
 
@@ -773,8 +813,25 @@ func (evm *EVM) update(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 					evm.StateDB.SetCode(address, ret)
 					evm.StateDB.SetStakeholders(address, stakeholders)
 					evm.StateDB.SetVotesNeededToWin(address, currentProposal.VotesNeededToWin)
-					evm.StateDB.SetProposal(address, currentProposalNumber, types.Proposal{InFavourOf: currentProposal.InFavourOf, Against: currentProposal.Against, VotesNeededToWin: currentProposal.VotesNeededToWin, ProposedCodeHash: currentProposal.ProposedCodeHash, Stakeholders: currentProposal.Stakeholders, CurrentState: types.ChangesApplied})
+					evm.StateDB.SetVotesNeededToDeactivate(address, currentProposal.VotesNeededToDeactivate)
+					evm.StateDB.SetTimeOut(address, currentProposal.TimeOut)
+					evm.StateDB.SetProposal(address, currentProposalNumber, types.Proposal{InFavourOf: currentProposal.InFavourOf, Against: currentProposal.Against, VotesNeededToWin: currentProposal.VotesNeededToWin, TimeOut: currentProposal.TimeOut, VotesNeededToDeactivate: currentProposal.VotesNeededToDeactivate, BlockNumber: currentProposal.BlockNumber, ProposedCodeHash: currentProposal.ProposedCodeHash, Stakeholders: currentProposal.Stakeholders, CurrentState: types.ChangesApplied})
 					reorganizer.Commit()
+					topics := make([]common.Hash, 3)
+					currentProposalNumberByteArray := make([]byte, 8)
+					binary.BigEndian.PutUint64(currentProposalNumberByteArray, currentProposalNumber)
+					currentStateByteArray := make([]byte, 8)
+					binary.BigEndian.PutUint64(currentStateByteArray, 3)
+					topics[0] = common.BytesToHash(currentProposalNumberByteArray)
+					topics[1] = address.Hash()
+					topics[2] = common.BytesToHash(currentStateByteArray)
+					v, _ := rlp.EncodeToBytes(&types.Proposal{InFavourOf: currentProposal.InFavourOf, Against: currentProposal.Against, VotesNeededToWin: currentProposal.VotesNeededToWin, TimeOut: currentProposal.TimeOut, VotesNeededToDeactivate: currentProposal.VotesNeededToDeactivate, BlockNumber: currentProposal.BlockNumber, ProposedCodeHash: currentProposal.ProposedCodeHash, Stakeholders: currentProposal.Stakeholders, CurrentState: types.ChangesApplied})
+					evm.StateDB.AddLog(&types.Log{
+						Address:     address,
+						Topics:      topics,
+						Data:        v,
+						BlockNumber: evm.Context.BlockNumber.Uint64(),
+					})
 
 				} else {
 					err = ErrCodeStoreOutOfGas
@@ -805,7 +862,7 @@ func (evm *EVM) update(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 			return nil, 0, ErrChangeApplicationNotPossible
 		}
 	} else {
-		if currentState == types.ChangesApplied {
+		if currentState == types.ChangesApplied || isTimedOut {
 			if gas < 21000*3 {
 				return nil, 0, ErrOutOfGas
 			} else {
@@ -813,7 +870,22 @@ func (evm *EVM) update(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 			}
 			evm.Context.Transfer(evm.StateDB, caller.Address(), address, value)
 			evm.StateDB.SetProposalNumber(address, proposalNumber)
-			evm.StateDB.SetProposal(address, proposalNumber, types.Proposal{InFavourOf: 0, Against: 0, VotesNeededToWin: votesNeededToWin, Stakeholders: stakeholders, ProposedCodeHash: crypto.Keccak256(codeAndHash.code), CurrentState: types.AcceptingVotes, ReorgInfoList: reorgList, DataTypeList: dataTypes})
+			evm.StateDB.SetProposal(address, proposalNumber, types.Proposal{InFavourOf: 0, Against: 0, VotesNeededToWin: votesNeededToWin, TimeOut: timeout, VotesNeededToDeactivate: votesNeededToDeactivate, BlockNumber: new(big.Int).Set(evm.Context.BlockNumber), Stakeholders: stakeholders, ProposedCodeHash: crypto.Keccak256(codeAndHash.code), CurrentState: types.AcceptingVotes, ReorgInfoList: reorgList, DataTypeList: dataTypes})
+			topics := make([]common.Hash, 3)
+			currentProposalNumberByteArray := make([]byte, 8)
+			binary.BigEndian.PutUint64(currentProposalNumberByteArray, currentProposalNumber)
+			currentStateByteArray := make([]byte, 8)
+			binary.BigEndian.PutUint64(currentStateByteArray, 0)
+			topics[0] = common.BytesToHash(currentProposalNumberByteArray)
+			topics[1] = address.Hash()
+			topics[2] = common.BytesToHash(currentStateByteArray)
+			v, _ := rlp.EncodeToBytes(&types.Proposal{InFavourOf: 0, Against: 0, VotesNeededToWin: votesNeededToWin, TimeOut: timeout, VotesNeededToDeactivate: votesNeededToDeactivate, BlockNumber: new(big.Int).Set(evm.Context.BlockNumber), Stakeholders: stakeholders, ProposedCodeHash: crypto.Keccak256(codeAndHash.code), CurrentState: types.AcceptingVotes, ReorgInfoList: reorgList, DataTypeList: dataTypes})
+			evm.StateDB.AddLog(&types.Log{
+				Address:     address,
+				Topics:      topics,
+				Data:        v,
+				BlockNumber: evm.Context.BlockNumber.Uint64(),
+			})
 			return nil, gas, nil
 		} else {
 			return nil, 0, ErrChangeApplicationNotPossible
@@ -822,11 +894,11 @@ func (evm *EVM) update(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 
 }
 
-func (evm *EVM) Update(caller ContractRef, code []byte, gas uint64, value *big.Int, address common.Address, stakeholders []common.Address, votesNeededToWin uint64, proposalNumber uint64, reorgList []types.ReorgInfo, dataTypes []types.DataType) (ret []byte, leftOverGas uint64, err error) {
-	return evm.update(caller, &codeAndHash{code: code}, gas, value, address, stakeholders, votesNeededToWin, proposalNumber, reorgList, dataTypes)
+func (evm *EVM) Update(caller ContractRef, code []byte, gas uint64, value *big.Int, address common.Address, stakeholders []common.Address, votesNeededToWin uint64, timeOut uint64, votesNeededToDeactivate uint64, proposalNumber uint64, reorgList []types.ReorgInfo, dataTypes []types.DataType) (ret []byte, leftOverGas uint64, err error) {
+	return evm.update(caller, &codeAndHash{code: code}, gas, value, address, stakeholders, votesNeededToWin, timeOut, votesNeededToDeactivate, proposalNumber, reorgList, dataTypes)
 }
 
-func (evm *EVM) ApproveProposal(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int, stakeholders []common.Address, votesNeededToWin uint64, proposalNumber uint64, reorgInfos []types.ReorgInfo, dataTypes []types.DataType) (ret []byte, leftOverGas uint64, err error) {
+func (evm *EVM) ApproveProposal(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int, stakeholders []common.Address, votesNeededToWin uint64, timeOut uint64, votesNeededToDeactivate uint64, proposalNumber uint64, reorgInfos []types.ReorgInfo, dataTypes []types.DataType) (ret []byte, leftOverGas uint64, err error) {
 
 	nonce := evm.StateDB.GetNonce(caller.Address())
 	if nonce+1 < nonce {
@@ -849,7 +921,18 @@ func (evm *EVM) ApproveProposal(caller ContractRef, addr common.Address, input [
 
 	currentProposal := evm.StateDB.GetProposal(addr, currentProposalNumber)
 
-	if currentProposal.CurrentState != types.AcceptingVotes {
+	var isTimedOut bool
+	finalValidBlockNumber := new(big.Int)
+	finalValidBlockNumber.Add(evm.StateDB.GetProposal(addr, currentProposalNumber).BlockNumber, new(big.Int).SetUint64(evm.StateDB.GetTimeOut(addr)))
+
+	if finalValidBlockNumber.Cmp(evm.Context.BlockNumber) < 0 {
+
+		isTimedOut = true
+	} else {
+		isTimedOut = false
+	}
+
+	if currentProposal.CurrentState != types.AcceptingVotes || isTimedOut {
 
 		return nil, 0, ErrNotAcceptingVotes
 	}
@@ -865,23 +948,47 @@ func (evm *EVM) ApproveProposal(caller ContractRef, addr common.Address, input [
 	}
 	currentProposal.InFavourOf++
 
-	if types.EqualStakeholders(currentProposal.Stakeholders, stakeholders) && types.EqualReorgInfoList(currentProposal.ReorgInfoList, reorgInfos) && types.EqualDataTypes(currentProposal.DataTypeList, dataTypes) {
+	if types.EqualStakeholders(currentProposal.Stakeholders, stakeholders) && types.EqualReorgInfoList(currentProposal.ReorgInfoList, reorgInfos) && types.EqualDataTypes(currentProposal.DataTypeList, dataTypes) && currentProposal.VotesNeededToWin == votesNeededToWin && currentProposal.VotesNeededToDeactivate == votesNeededToDeactivate && currentProposal.TimeOut == timeOut && bytes.Equal(currentProposal.ProposedCodeHash, input) {
 		fmt.Println("parameters Equal")
 	} else {
-		fmt.Println("Parameters not equal")
+		return nil, 0, ErrProposalParamMismatch
 	}
 
 	if evm.StateDB.GetVotesNeededToWin(addr) <= currentProposal.InFavourOf {
 		currentProposal.CurrentState = types.ProposalPassed
 		evm.StateDB.SetProposal(addr, currentProposalNumber, currentProposal)
+		topics := make([]common.Hash, 3)
+		currentProposalNumberByteArray := make([]byte, 8)
+		binary.BigEndian.PutUint64(currentProposalNumberByteArray, currentProposalNumber)
+		currentStateByteArray := make([]byte, 8)
+		binary.BigEndian.PutUint64(currentStateByteArray, 2)
+		topics[0] = common.BytesToHash(currentProposalNumberByteArray)
+		topics[1] = addr.Hash()
+		topics[2] = common.BytesToHash(currentStateByteArray)
+		v, _ := rlp.EncodeToBytes(&currentProposal)
+		evm.StateDB.AddLog(&types.Log{
+			Address:     addr,
+			Topics:      topics,
+			Data:        v,
+			BlockNumber: evm.Context.BlockNumber.Uint64(),
+		})
 	} else {
 		evm.StateDB.SetProposal(addr, currentProposalNumber, currentProposal)
 	}
 	evm.StateDB.SetVote(addr, currentProposalNumber, caller.Address(), types.Vote{Type: 1, TxHash: evm.StateDB.GetTxHash()})
+	topics := make([]common.Hash, 2)
+	v, _ := rlp.EncodeToBytes(&types.Vote{Type: 1, TxHash: evm.StateDB.GetTxHash()})
+	topics[0] = crypto.Keccak256Hash(v)
+	topics[1] = caller.Address().Hash()
+	evm.StateDB.AddLog(&types.Log{
+		Address:     addr,
+		Topics:      topics,
+		BlockNumber: evm.Context.BlockNumber.Uint64(),
+	})
 	return nil, gas, nil
 }
 
-func (evm *EVM) RejectProposal(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int, stakeholders []common.Address, votesNeededToWin uint64, proposalNumber uint64, reorgInfos []types.ReorgInfo, dataTypes []types.DataType) (ret []byte, leftOverGas uint64, err error) {
+func (evm *EVM) RejectProposal(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int, stakeholders []common.Address, votesNeededToWin uint64, timeOut uint64, votesNeededToDeactivate uint64, proposalNumber uint64, reorgInfos []types.ReorgInfo, dataTypes []types.DataType) (ret []byte, leftOverGas uint64, err error) {
 
 	nonce := evm.StateDB.GetNonce(caller.Address())
 	if nonce+1 < nonce {
@@ -904,7 +1011,18 @@ func (evm *EVM) RejectProposal(caller ContractRef, addr common.Address, input []
 
 	currentProposal := evm.StateDB.GetProposal(addr, currentProposalNumber)
 
-	if currentProposal.CurrentState != types.AcceptingVotes {
+	var isTimedOut bool
+	finalValidBlockNumber := new(big.Int)
+	finalValidBlockNumber.Add(evm.StateDB.GetProposal(addr, currentProposalNumber).BlockNumber, new(big.Int).SetUint64(evm.StateDB.GetTimeOut(addr)))
+
+	if finalValidBlockNumber.Cmp(evm.Context.BlockNumber) < 0 {
+
+		isTimedOut = true
+	} else {
+		isTimedOut = false
+	}
+
+	if currentProposal.CurrentState != types.AcceptingVotes || isTimedOut {
 
 		return nil, 0, ErrNotAcceptingVotes
 	}
@@ -920,19 +1038,44 @@ func (evm *EVM) RejectProposal(caller ContractRef, addr common.Address, input []
 	}
 	currentProposal.Against++
 
-	if types.EqualStakeholders(currentProposal.Stakeholders, stakeholders) && types.EqualReorgInfoList(currentProposal.ReorgInfoList, reorgInfos) && types.EqualDataTypes(currentProposal.DataTypeList, dataTypes) {
+	if types.EqualStakeholders(currentProposal.Stakeholders, stakeholders) && types.EqualReorgInfoList(currentProposal.ReorgInfoList, reorgInfos) && types.EqualDataTypes(currentProposal.DataTypeList, dataTypes) && currentProposal.VotesNeededToWin == votesNeededToWin && currentProposal.VotesNeededToDeactivate == votesNeededToDeactivate && currentProposal.TimeOut == timeOut && bytes.Equal(currentProposal.ProposedCodeHash, input) {
 		fmt.Println("parameters Equal")
 	} else {
-		fmt.Println("Parameters not equal")
+		return nil, 0, ErrProposalParamMismatch
 	}
 
 	if uint64(len(evm.StateDB.GetStakeholders(addr)))-evm.StateDB.GetVotesNeededToWin(addr)+1 <= currentProposal.Against {
 		currentProposal.CurrentState = types.ProposalRejected
 		evm.StateDB.SetProposal(addr, currentProposalNumber, currentProposal)
+		topics := make([]common.Hash, 3)
+		currentProposalNumberByteArray := make([]byte, 8)
+		binary.BigEndian.PutUint64(currentProposalNumberByteArray, currentProposalNumber)
+		currentStateByteArray := make([]byte, 8)
+		binary.BigEndian.PutUint64(currentStateByteArray, 1)
+		topics[0] = common.BytesToHash(currentProposalNumberByteArray)
+		topics[1] = addr.Hash()
+		topics[2] = common.BytesToHash(currentStateByteArray)
+		v, _ := rlp.EncodeToBytes(&currentProposal)
+		evm.StateDB.AddLog(&types.Log{
+			Address:     addr,
+			Topics:      topics,
+			Data:        v,
+			BlockNumber: evm.Context.BlockNumber.Uint64(),
+		})
 	} else {
 		evm.StateDB.SetProposal(addr, currentProposalNumber, currentProposal)
 	}
 	evm.StateDB.SetVote(addr, currentProposalNumber, caller.Address(), types.Vote{Type: 0, TxHash: evm.StateDB.GetTxHash()})
+	topics := make([]common.Hash, 2)
+	v, _ := rlp.EncodeToBytes(&types.Vote{Type: 0, TxHash: evm.StateDB.GetTxHash()})
+	topics[0] = crypto.Keccak256Hash(v)
+	topics[1] = caller.Address().Hash()
+	evm.StateDB.AddLog(&types.Log{
+		Address:     addr,
+		Topics:      topics,
+		BlockNumber: evm.Context.BlockNumber.Uint64(),
+	})
+
 	return nil, gas, nil
 }
 

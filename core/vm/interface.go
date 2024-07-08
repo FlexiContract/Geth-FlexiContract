@@ -35,6 +35,8 @@ type StateDB interface {
 	GetNonce(common.Address) uint64
 	GetProposalNumber(addr common.Address) uint64
 	GetVotesNeededToWin(addr common.Address) uint64
+	GetVotesNeededToDeactivate(addr common.Address) uint64
+	GetTimeOut(addr common.Address) uint64
 	GetStakeholders(addr common.Address) []common.Address
 	SetNonce(common.Address, uint64)
 	GetTxHash() common.Hash
@@ -45,6 +47,8 @@ type StateDB interface {
 	SetStakeholders(addr common.Address, stakeholders []common.Address)
 	SetProposalNumber(addr common.Address, proposalNumber uint64)
 	SetVotesNeededToWin(addr common.Address, votesNeededToWin uint64)
+	SetVotesNeededToDeactivate(addr common.Address, votesNeededToDeactivate uint64)
+	SetTimeOut(addr common.Address, timeOut uint64)
 	GetCodeSize(common.Address) int
 	GetStorageAsMap(addr common.Address) map[common.Hash]common.Hash
 

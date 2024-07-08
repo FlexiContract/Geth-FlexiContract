@@ -10,26 +10,32 @@ import (
 // MarshalJSON marshals as JSON.
 func (d DataType) MarshalJSON() ([]byte, error) {
 	type DataType struct {
-		Type          string `json:"type"                 gencodec:"required"`
-		Base          string `json:"base"`
-		Encoding      string `json:"encoding"             gencodec:"required"`
-		NumberOfBytes uint64 `json:"numberOfBytes"        gencodec:"required"`
+		Type              string   `json:"type"                 gencodec:"required"`
+		Base              string   `json:"base"`
+		Encoding          string   `json:"encoding"             gencodec:"required"`
+		PrevNumberOfBytes uint64   `json:"oldNumberOfBytes"        gencodec:"required"`
+		NewNumberOfBytes  uint64   `json:"newNumberOfBytes"        gencodec:"required"`
+		Members           []Member `json:"members"`
 	}
 	var enc DataType
 	enc.Type = d.Type
 	enc.Base = d.Base
 	enc.Encoding = d.Encoding
-	enc.NumberOfBytes = d.NumberOfBytes
+	enc.PrevNumberOfBytes = d.PrevNumberOfBytes
+	enc.NewNumberOfBytes = d.NewNumberOfBytes
+	enc.Members = d.Members
 	return json.Marshal(&enc)
 }
 
 // UnmarshalJSON unmarshals from JSON.
 func (d *DataType) UnmarshalJSON(input []byte) error {
 	type DataType struct {
-		Type          *string `json:"type"                 gencodec:"required"`
-		Base          *string `json:"base"`
-		Encoding      *string `json:"encoding"             gencodec:"required"`
-		NumberOfBytes *uint64 `json:"numberOfBytes"        gencodec:"required"`
+		Type              *string  `json:"type"                 gencodec:"required"`
+		Base              *string  `json:"base"`
+		Encoding          *string  `json:"encoding"             gencodec:"required"`
+		PrevNumberOfBytes *uint64  `json:"oldNumberOfBytes"        gencodec:"required"`
+		NewNumberOfBytes  *uint64  `json:"newNumberOfBytes"        gencodec:"required"`
+		Members           []Member `json:"members"`
 	}
 	var dec DataType
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -46,9 +52,16 @@ func (d *DataType) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'encoding' for DataType")
 	}
 	d.Encoding = *dec.Encoding
-	if dec.NumberOfBytes == nil {
-		return errors.New("missing required field 'numberOfBytes' for DataType")
+	if dec.PrevNumberOfBytes == nil {
+		return errors.New("missing required field 'oldNumberOfBytes' for DataType")
 	}
-	d.NumberOfBytes = *dec.NumberOfBytes
+	d.PrevNumberOfBytes = *dec.PrevNumberOfBytes
+	if dec.NewNumberOfBytes == nil {
+		return errors.New("missing required field 'newNumberOfBytes' for DataType")
+	}
+	d.NewNumberOfBytes = *dec.NewNumberOfBytes
+	if dec.Members != nil {
+		d.Members = dec.Members
+	}
 	return nil
 }

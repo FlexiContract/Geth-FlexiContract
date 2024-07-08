@@ -17,19 +17,23 @@ var _ = (*genesisAccountMarshaling)(nil)
 // MarshalJSON marshals as JSON.
 func (g GenesisAccount) MarshalJSON() ([]byte, error) {
 	type GenesisAccount struct {
-		ProposalNumber   math.HexOrDecimal64         `json:"proposalnumber,omitempty"`
-		VotesNeededToWin uint64                      `json:"votesneededtowin,omitempty"`
-		Code             hexutil.Bytes               `json:"code,omitempty"`
-		Storage          map[storageJSON]storageJSON `json:"storage,omitempty"`
-		Balance          *math.HexOrDecimal256       `json:"balance" gencodec:"required"`
-		Nonce            math.HexOrDecimal64         `json:"nonce,omitempty"`
-		Stakeholders     []common.Address            `json:"stakeholders,omitempty"`
-		Proposals        map[uint64]GenesisProposal  `json:"proposals,omitempty"`
-		PrivateKey       hexutil.Bytes               `json:"secretKey,omitempty"`
+		ProposalNumber   			math.HexOrDecimal64         `json:"proposalnumber,omitempty"`
+		VotesNeededToWin 			uint64                      `json:"votesneededtowin,omitempty"`
+		VotesNeededToDeactivate 	uint64                      `json:"votesneededtodeactivate,omitempty"`
+		TimeOut						uint64						`json:"timeout,omitempty"`
+		Code             			hexutil.Bytes               `json:"code,omitempty"`
+		Storage          			map[storageJSON]storageJSON `json:"storage,omitempty"`
+		Balance          			*math.HexOrDecimal256       `json:"balance" gencodec:"required"`
+		Nonce            			math.HexOrDecimal64         `json:"nonce,omitempty"`
+		Stakeholders     			[]common.Address            `json:"stakeholders,omitempty"`
+		Proposals        			map[uint64]GenesisProposal  `json:"proposals,omitempty"`
+		PrivateKey       			hexutil.Bytes               `json:"secretKey,omitempty"`
 	}
 	var enc GenesisAccount
 	enc.ProposalNumber = math.HexOrDecimal64(g.ProposalNumber)
 	enc.VotesNeededToWin = g.VotesNeededToWin
+	enc.VotesNeededToDeactivate = g.VotesNeededToDeactivate
+	enc.TimeOut = g.TimeOut
 	enc.Code = g.Code
 	if g.Storage != nil {
 		enc.Storage = make(map[storageJSON]storageJSON, len(g.Storage))
@@ -48,15 +52,17 @@ func (g GenesisAccount) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON unmarshals from JSON.
 func (g *GenesisAccount) UnmarshalJSON(input []byte) error {
 	type GenesisAccount struct {
-		ProposalNumber   *math.HexOrDecimal64        `json:"proposalnumber,omitempty"`
-		VotesNeededToWin *uint64                     `json:"votesneededtowin,omitempty"`
-		Code             *hexutil.Bytes              `json:"code,omitempty"`
-		Storage          map[storageJSON]storageJSON `json:"storage,omitempty"`
-		Balance          *math.HexOrDecimal256       `json:"balance" gencodec:"required"`
-		Nonce            *math.HexOrDecimal64        `json:"nonce,omitempty"`
-		Stakeholders     []common.Address            `json:"stakeholders,omitempty"`
-		Proposals        map[uint64]GenesisProposal  `json:"proposals,omitempty"`
-		PrivateKey       *hexutil.Bytes              `json:"secretKey,omitempty"`
+		ProposalNumber   			*math.HexOrDecimal64        `json:"proposalnumber,omitempty"`
+		VotesNeededToWin 			*uint64                     `json:"votesneededtowin,omitempty"`
+		VotesNeededToDeactivate 	*uint64                     `json:"votesneededtodeactivate,omitempty"`
+		TimeOut 					*uint64                     `json:"timeout,omitempty"`
+		Code            	 		*hexutil.Bytes              `json:"code,omitempty"`
+		Storage          			map[storageJSON]storageJSON `json:"storage,omitempty"`
+		Balance          			*math.HexOrDecimal256       `json:"balance" gencodec:"required"`
+		Nonce            			*math.HexOrDecimal64        `json:"nonce,omitempty"`
+		Stakeholders     			[]common.Address            `json:"stakeholders,omitempty"`
+		Proposals        			map[uint64]GenesisProposal  `json:"proposals,omitempty"`
+		PrivateKey       			*hexutil.Bytes              `json:"secretKey,omitempty"`
 	}
 	var dec GenesisAccount
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -67,6 +73,12 @@ func (g *GenesisAccount) UnmarshalJSON(input []byte) error {
 	}
 	if dec.VotesNeededToWin != nil {
 		g.VotesNeededToWin = *dec.VotesNeededToWin
+	}
+	if dec.VotesNeededToDeactivate != nil {
+		g.VotesNeededToDeactivate = *dec.VotesNeededToDeactivate
+	}
+	if dec.TimeOut != nil {
+		g.TimeOut = *dec.TimeOut
 	}
 	if dec.Code != nil {
 		g.Code = *dec.Code

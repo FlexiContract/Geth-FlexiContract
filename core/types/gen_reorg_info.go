@@ -13,7 +13,6 @@ import (
 func (r ReorgInfo) MarshalJSON() ([]byte, error) {
 	type ReorgInfo struct {
 		Type       string      `json:"type"        gencodec:"required"`
-		Label      string      `json:"label"       gencodec:"required"`
 		PrevSlot   common.Hash `json:"oldSlot"     gencodec:"required"`
 		NewSlot    common.Hash `json:"newSlot"     gencodec:"required"`
 		PrevOffset uint64      `json:"oldOffset"   gencodec:"required"`
@@ -21,7 +20,6 @@ func (r ReorgInfo) MarshalJSON() ([]byte, error) {
 	}
 	var enc ReorgInfo
 	enc.Type = r.Type
-	enc.Label = r.Label
 	enc.PrevSlot = r.PrevSlot
 	enc.NewSlot = r.NewSlot
 	enc.PrevOffset = r.PrevOffset
@@ -33,7 +31,6 @@ func (r ReorgInfo) MarshalJSON() ([]byte, error) {
 func (r *ReorgInfo) UnmarshalJSON(input []byte) error {
 	type ReorgInfo struct {
 		Type       *string      `json:"type"        gencodec:"required"`
-		Label      *string      `json:"label"       gencodec:"required"`
 		PrevSlot   *common.Hash `json:"oldSlot"     gencodec:"required"`
 		NewSlot    *common.Hash `json:"newSlot"     gencodec:"required"`
 		PrevOffset *uint64      `json:"oldOffset"   gencodec:"required"`
@@ -47,10 +44,6 @@ func (r *ReorgInfo) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'type' for ReorgInfo")
 	}
 	r.Type = *dec.Type
-	if dec.Label == nil {
-		return errors.New("missing required field 'label' for ReorgInfo")
-	}
-	r.Label = *dec.Label
 	if dec.PrevSlot == nil {
 		return errors.New("missing required field 'oldSlot' for ReorgInfo")
 	}

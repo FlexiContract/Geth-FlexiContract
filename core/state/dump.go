@@ -49,22 +49,48 @@ type DumpCollector interface {
 
 // DumpAccount represents an account in the state.
 type DumpAccount struct {
-	ProposalNumber   uint64                       `json:"proposalnumber"`
-	Balance          string                       `json:"balance"`
-	Nonce            uint64                       `json:"nonce"`
-	Root             hexutil.Bytes                `json:"root"`
-	ProposalRoot     hexutil.Bytes                `json:"proposalroot"`
-	BallotRoot       hexutil.Bytes                `json:"ballotroot"`
-	VotesNeededToWin uint64                       `json:"votesneededtowin"`
-	CodeHash         hexutil.Bytes                `json:"codeHash"`
-	Stakeholders     []hexutil.Bytes              `json:"stakeholders"`
-	Code             hexutil.Bytes                `json:"code,omitempty"`
-	Storage          map[common.Hash]string       `json:"storage,omitempty"`
-	Proposals        map[common.Hash]DumpProposal `json:"proposals,omitempty"`
-	Votes            map[common.Hash]DumpVote     `json:"votes,omitempty"`
-	Address          *common.Address              `json:"address,omitempty"` // Address only present in iterative (line-by-line) mode
-	SecureKey        hexutil.Bytes                `json:"key,omitempty"`     // If we don't have address, we can output the key
+	ProposalNumber          uint64                       `json:"proposalnumber"`
+	Balance                 string                       `json:"balance"`
+	Nonce                   uint64                       `json:"nonce"`
+	Root                    hexutil.Bytes                `json:"root"`
+	ProposalRoot            hexutil.Bytes                `json:"proposalroot"`
+	BallotRoot              hexutil.Bytes                `json:"ballotroot"`
+	VotesNeededToWin        uint64                       `json:"votesneededtowin"`
+	VotesNeededToDeactivate uint64                       `json:"votesneededtodeactivate"`
+	TimeOut                 uint64                       `json:"timeout"`
+	CodeHash                hexutil.Bytes                `json:"codeHash"`
+	Stakeholders            []hexutil.Bytes              `json:"stakeholders"`
+	Code                    hexutil.Bytes                `json:"code,omitempty"`
+	Storage                 map[common.Hash]string       `json:"storage,omitempty"`
+	Proposals               map[common.Hash]DumpProposal `json:"proposals,omitempty"`
+	Votes                   map[common.Hash]DumpVote     `json:"votes,omitempty"`
+	Address                 *common.Address              `json:"address,omitempty"` // Address only present in iterative (line-by-line) mode
+	SecureKey               hexutil.Bytes                `json:"key,omitempty"`     // If we don't have address, we can output the key
 
+}
+type DumpReorgInfo struct {
+	Type       string        `json:"type"`
+	PrevSlot   hexutil.Bytes `json:"oldSlot"`
+	NewSlot    hexutil.Bytes `json:"newSlot"`
+	PrevOffset uint64        `json:"oldOffset"`
+	NewOffset  uint64        `json:"newOffset"`
+}
+
+type DumpMember struct {
+	PrevOffset uint64        `json:"oldOffset"`
+	NewOffset  uint64        `json:"newOffset"`
+	PrevSlot   hexutil.Bytes `json:"oldSlot"`
+	NewSlot    hexutil.Bytes `json:"newSlot"`
+	Type       string        `json:"type"`
+}
+
+type DumpDataType struct {
+	Type              string       `json:"type"`
+	Base              string       `json:"base,omitempty"`
+	Encoding          string       `json:"encoding"`
+	PrevNumberOfBytes uint64       `json:"prevNumberOfBytes"`
+	NewNumberOfBytes  uint64       `json:"newNumberOfBytes"`
+	Members           []DumpMember `json:"members,omitempty"`
 }
 
 type DumpProposal struct {
@@ -74,6 +100,8 @@ type DumpProposal struct {
 	VotesNeededToWin uint64           `json:"votesneededtowin"`
 	ProposedCodeHash hexutil.Bytes    `json:"proposedcode"`
 	CurrentState     uint8            `json:"currentstate"`
+	ReorgInfos       []DumpReorgInfo  `json:"reorgInfos"`
+	Datatypes        []DumpDataType   `json:"dataTypes"`
 }
 
 type DumpVote struct {
@@ -122,21 +150,23 @@ type iterativeDump struct {
 // OnAccount implements DumpCollector interface
 func (d iterativeDump) OnAccount(addr common.Address, account DumpAccount) {
 	dumpAccount := &DumpAccount{
-		ProposalNumber:   account.ProposalNumber,
-		Balance:          account.Balance,
-		Nonce:            account.Nonce,
-		Root:             account.Root,
-		ProposalRoot:     account.ProposalRoot,
-		BallotRoot:       account.BallotRoot,
-		VotesNeededToWin: account.VotesNeededToWin,
-		CodeHash:         account.CodeHash,
-		Stakeholders:     account.Stakeholders,
-		Code:             account.Code,
-		Storage:          account.Storage,
-		SecureKey:        account.SecureKey,
-		Proposals:        account.Proposals,
-		Votes:            account.Votes,
-		Address:          nil,
+		ProposalNumber:          account.ProposalNumber,
+		Balance:                 account.Balance,
+		Nonce:                   account.Nonce,
+		Root:                    account.Root,
+		ProposalRoot:            account.ProposalRoot,
+		BallotRoot:              account.BallotRoot,
+		VotesNeededToWin:        account.VotesNeededToWin,
+		VotesNeededToDeactivate: account.VotesNeededToDeactivate,
+		TimeOut:                 account.TimeOut,
+		CodeHash:                account.CodeHash,
+		Stakeholders:            account.Stakeholders,
+		Code:                    account.Code,
+		Storage:                 account.Storage,
+		SecureKey:               account.SecureKey,
+		Proposals:               account.Proposals,
+		Votes:                   account.Votes,
+		Address:                 nil,
 	}
 	if addr != (common.Address{}) {
 		dumpAccount.Address = &addr
@@ -179,16 +209,18 @@ func (s *StateDB) DumpToCollector(c DumpCollector, conf *DumpConfig) (nextKey []
 		}
 
 		account := DumpAccount{
-			ProposalNumber:   data.ProposalNumber,
-			Balance:          data.Balance.String(),
-			VotesNeededToWin: data.VotesNeededTowin,
-			Nonce:            data.Nonce,
-			Root:             data.Root[:],
-			CodeHash:         data.CodeHash,
-			ProposalRoot:     data.ProposalRoot[:],
-			BallotRoot:       data.BallotRoot[:],
-			Stakeholders:     stkhldrs,
-			SecureKey:        it.Key,
+			ProposalNumber:          data.ProposalNumber,
+			Balance:                 data.Balance.String(),
+			VotesNeededToWin:        data.VotesNeededTowin,
+			VotesNeededToDeactivate: data.VotesNeededToDeactivate,
+			TimeOut:                 data.TimeOut,
+			Nonce:                   data.Nonce,
+			Root:                    data.Root[:],
+			CodeHash:                data.CodeHash,
+			ProposalRoot:            data.ProposalRoot[:],
+			BallotRoot:              data.BallotRoot[:],
+			Stakeholders:            stkhldrs,
+			SecureKey:               it.Key,
 		}
 		addrBytes := s.trie.GetKey(it.Key)
 		if addrBytes == nil {
@@ -225,7 +257,21 @@ func (s *StateDB) DumpToCollector(c DumpCollector, conf *DumpConfig) (nextKey []
 				log.Error("Failed to decode the value returned by iterator", "error", err)
 				continue
 			}
-			account.Proposals[common.BytesToHash(s.trie.GetKey(proposalIt.Key))] = DumpProposal{InFavourOf: proposal.InFavourOf, Against: proposal.Against, Stakeholders: proposal.Stakeholders, VotesNeededToWin: proposal.VotesNeededToWin, CurrentState: proposal.CurrentState, ProposedCodeHash: proposal.ProposedCodeHash}
+			var reorgInfos []DumpReorgInfo
+			for _, reorgInfo := range proposal.ReorgInfoList {
+				reorgInfos = append(reorgInfos, DumpReorgInfo{Type: reorgInfo.Type, PrevSlot: reorgInfo.PrevSlot[:], NewSlot: reorgInfo.NewSlot[:], PrevOffset: reorgInfo.PrevOffset, NewOffset: reorgInfo.NewOffset})
+			}
+
+			var dataTypes []DumpDataType
+			for _, dataType := range proposal.DataTypeList {
+				var members []DumpMember
+				for _, member := range dataType.Members {
+
+					members = append(members, DumpMember{Type: member.Type, PrevOffset: member.PrevOffset, NewOffset: member.NewOffset, PrevSlot: member.PrevSlot[:], NewSlot: member.NewSlot[:]})
+				}
+				dataTypes = append(dataTypes, DumpDataType{Type: dataType.Type, Base: dataType.Base, Encoding: dataType.Encoding, PrevNumberOfBytes: dataType.PrevNumberOfBytes, NewNumberOfBytes: dataType.NewNumberOfBytes, Members: members})
+			}
+			account.Proposals[common.BytesToHash(s.trie.GetKey(proposalIt.Key))] = DumpProposal{InFavourOf: proposal.InFavourOf, Against: proposal.Against, Stakeholders: proposal.Stakeholders, VotesNeededToWin: proposal.VotesNeededToWin, CurrentState: proposal.CurrentState, ProposedCodeHash: proposal.ProposedCodeHash, ReorgInfos: reorgInfos, Datatypes: dataTypes}
 		}
 		account.Votes = make(map[common.Hash]DumpVote)
 		ballotIt := trie.NewIterator(obj.getBallotTrie(s.db).NodeIterator(nil))

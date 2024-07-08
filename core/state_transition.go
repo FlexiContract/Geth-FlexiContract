@@ -90,6 +90,8 @@ type Message interface {
 	IsRejectVote() bool
 	ProposalNumber() uint64
 	VotesNeededToWin() uint64
+	TimeOut() uint64
+	VotesNeededToDeactivate() uint64
 }
 
 // ExecutionResult includes all output after executing given evm
@@ -306,20 +308,24 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	}
 
 	var (
-		msg              = st.msg
-		sender           = vm.AccountRef(msg.From())
-		rules            = st.evm.ChainConfig().Rules(st.evm.Context.BlockNumber, st.evm.Context.Random != nil)
-		contractCreation = msg.To() == nil
-		contractUpdation = msg.IsUpdate()
-		stakeholders     = st.msg.Stakeholders()
-		votesNeededToWin = st.msg.VotesNeededToWin()
-		approvalVote     = st.msg.IsApproveVote()
-		rejectionVote    = st.msg.IsRejectVote()
-		proposalNumber   = st.msg.ProposalNumber()
-		reorgList        = msg.ReorgList()
-		dataTypes        = msg.DataTypes()
+		msg                     = st.msg
+		sender                  = vm.AccountRef(msg.From())
+		rules                   = st.evm.ChainConfig().Rules(st.evm.Context.BlockNumber, st.evm.Context.Random != nil)
+		contractCreation        = msg.To() == nil
+		contractUpdation        = msg.IsUpdate()
+		stakeholders            = st.msg.Stakeholders()
+		votesNeededToWin        = st.msg.VotesNeededToWin()
+		timeOut                 = msg.TimeOut()
+		votesNeededToDeactivate = msg.VotesNeededToDeactivate()
+		approvalVote            = st.msg.IsApproveVote()
+		rejectionVote           = st.msg.IsRejectVote()
+		proposalNumber          = st.msg.ProposalNumber()
+		reorgList               = msg.ReorgList()
+		dataTypes               = msg.DataTypes()
 	)
 
+	fmt.Printf("Timeout is %d\n", timeOut)
+	fmt.Printf("Votes Needed To Deactivate %d\n", votesNeededToDeactivate)
 	if stakeholders != nil {
 		fmt.Println("***************************************************************************************")
 		for _, stkhldr := range stakeholders {
@@ -360,22 +366,22 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		ret, _, st.gas, vmerr = st.evm.Create(sender, st.data, st.gas, st.value)
 	} else if (contractUpdation && contractCreation) || (approvalVote && contractCreation) || (rejectionVote && contractCreation) {
 		fmt.Println("I am here")
-		ret, _, st.gas, vmerr = st.evm.UpdatableCreate(sender, st.data, st.gas, st.value, stakeholders, votesNeededToWin)
+		ret, _, st.gas, vmerr = st.evm.UpdatableCreate(sender, st.data, st.gas, st.value, stakeholders, votesNeededToWin, votesNeededToDeactivate, timeOut)
 		fmt.Print("Error")
 		fmt.Println(vmerr)
 	} else if contractUpdation && !contractCreation {
 		fmt.Println("Updating")
 		result := fmt.Sprintf("Votes needed to win: %d", votesNeededToWin)
 		fmt.Println(result)
-		ret, st.gas, vmerr = st.evm.Update(sender, st.data, st.gas, st.value, st.to(), stakeholders, votesNeededToWin, proposalNumber, reorgList, dataTypes)
+		ret, st.gas, vmerr = st.evm.Update(sender, st.data, st.gas, st.value, st.to(), stakeholders, votesNeededToWin, timeOut, votesNeededToDeactivate, proposalNumber, reorgList, dataTypes)
 		fmt.Print("Error")
 		fmt.Println(vmerr)
 	} else if (approvalVote || rejectionVote) && !contractCreation {
 		fmt.Println("Voting")
 		if approvalVote {
-			ret, st.gas, vmerr = st.evm.ApproveProposal(sender, st.to(), st.data, st.gas, st.value, stakeholders, votesNeededToWin, proposalNumber, reorgList, dataTypes)
+			ret, st.gas, vmerr = st.evm.ApproveProposal(sender, st.to(), st.data, st.gas, st.value, stakeholders, votesNeededToWin, timeOut, votesNeededToDeactivate, proposalNumber, reorgList, dataTypes)
 		} else {
-			ret, st.gas, vmerr = st.evm.RejectProposal(sender, st.to(), st.data, st.gas, st.value, stakeholders, votesNeededToWin, proposalNumber, reorgList, dataTypes)
+			ret, st.gas, vmerr = st.evm.RejectProposal(sender, st.to(), st.data, st.gas, st.value, stakeholders, votesNeededToWin, timeOut, votesNeededToDeactivate, proposalNumber, reorgList, dataTypes)
 		}
 		fmt.Println(vmerr)
 	} else {

@@ -19,13 +19,22 @@ func (obj *Proposal) EncodeRLP(_w io.Writer) error {
 	}
 	w.ListEnd(_tmp1)
 	w.WriteUint64(obj.VotesNeededToWin)
+	if obj.BlockNumber == nil {
+		w.Write(rlp.EmptyString)
+	} else {
+		if obj.BlockNumber.Sign() == -1 {
+			return rlp.ErrNegativeBigInt
+		}
+		w.WriteBigInt(obj.BlockNumber)
+	}
+	w.WriteUint64(obj.TimeOut)
+	w.WriteUint64(obj.VotesNeededToDeactivate)
 	w.WriteBytes(obj.ProposedCodeHash)
 	w.WriteUint64(uint64(obj.CurrentState))
 	_tmp3 := w.List()
 	for _, _tmp4 := range obj.ReorgInfoList {
 		_tmp5 := w.List()
 		w.WriteString(_tmp4.Type)
-		w.WriteString(_tmp4.Label)
 		w.WriteBytes(_tmp4.PrevSlot[:])
 		w.WriteBytes(_tmp4.NewSlot[:])
 		w.WriteUint64(_tmp4.PrevOffset)
@@ -39,7 +48,19 @@ func (obj *Proposal) EncodeRLP(_w io.Writer) error {
 		w.WriteString(_tmp7.Type)
 		w.WriteString(_tmp7.Base)
 		w.WriteString(_tmp7.Encoding)
-		w.WriteUint64(_tmp7.NumberOfBytes)
+		w.WriteUint64(_tmp7.PrevNumberOfBytes)
+		w.WriteUint64(_tmp7.NewNumberOfBytes)
+		_tmp9 := w.List()
+		for _, _tmp10 := range _tmp7.Members {
+			_tmp11 := w.List()
+			w.WriteUint64(_tmp10.PrevOffset)
+			w.WriteUint64(_tmp10.NewOffset)
+			w.WriteBytes(_tmp10.PrevSlot[:])
+			w.WriteBytes(_tmp10.NewSlot[:])
+			w.WriteString(_tmp10.Type)
+			w.ListEnd(_tmp11)
+		}
+		w.ListEnd(_tmp9)
 		w.ListEnd(_tmp8)
 	}
 	w.ListEnd(_tmp6)

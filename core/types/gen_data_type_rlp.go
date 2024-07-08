@@ -14,7 +14,19 @@ func (obj *DataType) EncodeRLP(_w io.Writer) error {
 	w.WriteString(obj.Type)
 	w.WriteString(obj.Base)
 	w.WriteString(obj.Encoding)
-	w.WriteUint64(obj.NumberOfBytes)
+	w.WriteUint64(obj.PrevNumberOfBytes)
+	w.WriteUint64(obj.NewNumberOfBytes)
+	_tmp1 := w.List()
+	for _, _tmp2 := range obj.Members {
+		_tmp3 := w.List()
+		w.WriteUint64(_tmp2.PrevOffset)
+		w.WriteUint64(_tmp2.NewOffset)
+		w.WriteBytes(_tmp2.PrevSlot[:])
+		w.WriteBytes(_tmp2.NewSlot[:])
+		w.WriteString(_tmp2.Type)
+		w.ListEnd(_tmp3)
+	}
+	w.ListEnd(_tmp1)
 	w.ListEnd(_tmp0)
 	return w.Flush()
 }

@@ -367,6 +367,8 @@ func (s eip2930Signer) Hash(tx *Transaction) common.Hash {
 				tx.Stakeholders(),
 				tx.ProposalNumber(),
 				tx.VotesNeededToWin(),
+				tx.TimeOut(),
+				tx.VotesNeededToDeactivate(),
 			})
 	case ApproveProposalTxType:
 		return prefixedRlpHash(
@@ -385,6 +387,8 @@ func (s eip2930Signer) Hash(tx *Transaction) common.Hash {
 				tx.Stakeholders(),
 				tx.ProposalNumber(),
 				tx.VotesNeededToWin(),
+				tx.TimeOut(),
+				tx.VotesNeededToDeactivate(),
 			})
 	case RejectProposalTxType:
 		return prefixedRlpHash(
@@ -403,6 +407,8 @@ func (s eip2930Signer) Hash(tx *Transaction) common.Hash {
 				tx.Stakeholders(),
 				tx.ProposalNumber(),
 				tx.VotesNeededToWin(),
+				tx.TimeOut(),
+				tx.VotesNeededToDeactivate(),
 			})
 	default:
 		// This _should_ not happen, but in case someone sends in a bad

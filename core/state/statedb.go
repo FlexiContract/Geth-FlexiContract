@@ -303,6 +303,24 @@ func (s *StateDB) GetVotesNeededToWin(addr common.Address) uint64 {
 	return 0
 }
 
+func (s *StateDB) GetVotesNeededToDeactivate(addr common.Address) uint64 {
+	stateObject := s.getStateObject(addr)
+	if stateObject != nil {
+		return stateObject.VotesNeededToDeactivate()
+	}
+
+	return 0
+}
+
+func (s *StateDB) GetTimeOut(addr common.Address) uint64 {
+	stateObject := s.getStateObject(addr)
+	if stateObject != nil {
+		return stateObject.TimeOut()
+	}
+
+	return 0
+}
+
 func (s *StateDB) GetStakeholders(addr common.Address) []common.Address {
 	stateObject := s.getStateObject(addr)
 	if stateObject != nil {
@@ -357,7 +375,7 @@ func (s *StateDB) GetProposal(addr common.Address, proposalNumber uint64) types.
 		binary.BigEndian.PutUint64(key[24:32], proposalNumber)
 		return stateObject.GetProposal(s.db, key)
 	}
-	return types.Proposal{}
+	return types.Proposal{BlockNumber: new(big.Int)}
 }
 
 func (s *StateDB) GetVote(addr, voterAddress common.Address, proposalNumber uint64) types.Vote {
@@ -527,6 +545,20 @@ func (s *StateDB) SetVotesNeededToWin(addr common.Address, votesNeededToWin uint
 	}
 }
 
+func (s *StateDB) SetVotesNeededToDeactivate(addr common.Address, votesNeededToDeactivate uint64) {
+	stateObject := s.GetOrNewStateObject(addr)
+	if stateObject != nil {
+		stateObject.SetVotesNeededToDeactivate(votesNeededToDeactivate)
+	}
+}
+
+func (s *StateDB) SetTimeOut(addr common.Address, timeOut uint64) {
+	stateObject := s.GetOrNewStateObject(addr)
+	if stateObject != nil {
+		stateObject.SetTimeOut(timeOut)
+	}
+}
+
 func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
@@ -643,7 +675,7 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	// enough to track account updates at commit time, deletions need tracking
 	// at transaction boundary level to ensure we capture state clearing.
 	if s.snap != nil {
-		s.snapAccounts[obj.addrHash] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.ProposalRoot, obj.data.BallotRoot, obj.data.CodeHash, obj.data.Stakeholders, obj.data.ProposalNumber, obj.data.VotesNeededTowin)
+		s.snapAccounts[obj.addrHash] = snapshot.SlimAccountRLP(obj.data.Nonce, obj.data.Balance, obj.data.Root, obj.data.ProposalRoot, obj.data.BallotRoot, obj.data.CodeHash, obj.data.Stakeholders, obj.data.ProposalNumber, obj.data.VotesNeededTowin, obj.data.VotesNeededToDeactivate, obj.data.TimeOut)
 	}
 }
 
@@ -692,15 +724,17 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 				return nil
 			}
 			data = &types.StateAccount{
-				Nonce:            acc.Nonce,
-				Balance:          acc.Balance,
-				CodeHash:         acc.CodeHash,
-				Root:             common.BytesToHash(acc.Root),
-				ProposalRoot:     common.BytesToHash(acc.ProposalRoot),
-				BallotRoot:       common.BytesToHash(acc.BallotRoot),
-				Stakeholders:     acc.Stakeholders,
-				ProposalNumber:   acc.ProposalNumber,
-				VotesNeededTowin: acc.VotesNeededToWin,
+				Nonce:                   acc.Nonce,
+				Balance:                 acc.Balance,
+				CodeHash:                acc.CodeHash,
+				Root:                    common.BytesToHash(acc.Root),
+				ProposalRoot:            common.BytesToHash(acc.ProposalRoot),
+				BallotRoot:              common.BytesToHash(acc.BallotRoot),
+				Stakeholders:            acc.Stakeholders,
+				ProposalNumber:          acc.ProposalNumber,
+				VotesNeededTowin:        acc.VotesNeededToWin,
+				VotesNeededToDeactivate: acc.VotesNeededToDeactivate,
+				TimeOut:                 acc.TimeOut,
 			}
 			if len(data.CodeHash) == 0 {
 				data.CodeHash = emptyCodeHash

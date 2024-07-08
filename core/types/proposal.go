@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -15,14 +16,17 @@ const (
 )
 
 type Proposal struct {
-	InFavourOf       uint64
-	Against          uint64
-	Stakeholders     []common.Address
-	VotesNeededToWin uint64
-	ProposedCodeHash []byte
-	CurrentState     uint8
-	ReorgInfoList    []ReorgInfo
-	DataTypeList     []DataType
+	InFavourOf              uint64
+	Against                 uint64
+	Stakeholders            []common.Address
+	VotesNeededToWin        uint64
+	BlockNumber             *big.Int
+	TimeOut                 uint64
+	VotesNeededToDeactivate uint64
+	ProposedCodeHash        []byte
+	CurrentState            uint8
+	ReorgInfoList           []ReorgInfo
+	DataTypeList            []DataType
 }
 
 func EqualStakeholders(list1 []common.Address, list2 []common.Address) bool {
@@ -80,15 +84,15 @@ func EqualDataTypes(list1 []DataType, list2 []DataType) bool {
 		return false
 	}
 
-	seen := make(map[DataType]bool)
+	seen := make(map[string]bool)
 
 	for _, dataType := range list1 {
-		seen[dataType] = true
+		seen[dataType.Type] = true
 	}
 
 	for _, dataType := range list2 {
 
-		if _, exist := seen[dataType]; !exist {
+		if _, exist := seen[dataType.Type]; !exist {
 
 			return false
 		}
@@ -99,5 +103,5 @@ func EqualDataTypes(list1 []DataType, list2 []DataType) bool {
 
 func (p Proposal) Equals(other Proposal) bool {
 
-	return p.InFavourOf == other.InFavourOf && p.Against == other.Against && p.VotesNeededToWin == other.VotesNeededToWin && bytes.Equal(p.ProposedCodeHash, other.ProposedCodeHash) && p.CurrentState == other.CurrentState && EqualStakeholders(p.Stakeholders, other.Stakeholders) == true && EqualReorgInfoList(p.ReorgInfoList, other.ReorgInfoList) == true && EqualDataTypes(p.DataTypeList, other.DataTypeList) == true
+	return p.InFavourOf == other.InFavourOf && p.Against == other.Against && p.VotesNeededToWin == other.VotesNeededToWin && p.BlockNumber.Cmp(other.BlockNumber) == 0 && p.TimeOut == other.TimeOut && p.VotesNeededToDeactivate == other.VotesNeededToDeactivate && bytes.Equal(p.ProposedCodeHash, other.ProposedCodeHash) && p.CurrentState == other.CurrentState && EqualStakeholders(p.Stakeholders, other.Stakeholders) && EqualReorgInfoList(p.ReorgInfoList, other.ReorgInfoList) && EqualDataTypes(p.DataTypeList, other.DataTypeList)
 }

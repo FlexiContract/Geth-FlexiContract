@@ -361,6 +361,18 @@ func (ec *Client) VotesNeededToWinAt(ctx context.Context, account common.Address
 	return result, err
 }
 
+func (ec *Client) VotesNeededToDeactivateAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error) {
+	var result uint64
+	err := ec.c.CallContext(ctx, &result, "eth_getVotesNeededToDeactivate", account, toBlockNumArg(blockNumber))
+	return result, err
+}
+
+func (ec *Client) TimeOutAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error) {
+	var result uint64
+	err := ec.c.CallContext(ctx, &result, "eth_getTimeOut", account, toBlockNumArg(blockNumber))
+	return result, err
+}
+
 func (ec *Client) ExecutionStateAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint8, error) {
 	var result uint8
 	err := ec.c.CallContext(ctx, &result, "eth_getExecutionState", account, toBlockNumArg(blockNumber))

@@ -664,6 +664,22 @@ func (s *BlockChainAPI) GetVotesNeededToWin(ctx context.Context, address common.
 	return state.GetVotesNeededToWin(address), state.Error()
 }
 
+func (s *BlockChainAPI) GetVotesNeededToDeactivate(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (uint64, error) {
+	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+	if state == nil || err != nil {
+		return 0, err
+	}
+	return state.GetVotesNeededToDeactivate(address), state.Error()
+}
+
+func (s *BlockChainAPI) GetTimeOut(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (uint64, error) {
+	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
+	if state == nil || err != nil {
+		return 0, err
+	}
+	return state.GetTimeOut(address), state.Error()
+}
+
 func (s *BlockChainAPI) GetExecutionState(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (uint8, error) {
 	state, _, err := s.b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
@@ -1312,30 +1328,32 @@ func (s *BlockChainAPI) rpcMarshalBlock(ctx context.Context, b *types.Block, inc
 
 // RPCTransaction represents a transaction that will serialize to the RPC representation of a transaction
 type RPCTransaction struct {
-	BlockHash        *common.Hash      `json:"blockHash"`
-	BlockNumber      *hexutil.Big      `json:"blockNumber"`
-	From             common.Address    `json:"from"`
-	Gas              hexutil.Uint64    `json:"gas"`
-	GasPrice         *hexutil.Big      `json:"gasPrice"`
-	GasFeeCap        *hexutil.Big      `json:"maxFeePerGas,omitempty"`
-	GasTipCap        *hexutil.Big      `json:"maxPriorityFeePerGas,omitempty"`
-	Hash             common.Hash       `json:"hash"`
-	Input            hexutil.Bytes     `json:"input"`
-	Nonce            hexutil.Uint64    `json:"nonce"`
-	To               *common.Address   `json:"to"`
-	TransactionIndex *hexutil.Uint64   `json:"transactionIndex"`
-	Value            *hexutil.Big      `json:"value"`
-	Type             hexutil.Uint64    `json:"type"`
-	Accesses         *types.AccessList `json:"accessList,omitempty"`
-	Reorganizations  *types.ReorgList  `json:"reorgList,omitempty"`
-	DataTypes        *types.DataTypes  `json:"dataTypes,omitempty"`
-	Stakeholders     *[]common.Address `json:"stakeholders,omitempty"`
-	ProposalNumber   *hexutil.Uint64   `json:"proposalnumber,omitempty"`
-	VotesNeededToWin *hexutil.Uint64   `json:"votesneededtowin,omitempty"`
-	ChainID          *hexutil.Big      `json:"chainId,omitempty"`
-	V                *hexutil.Big      `json:"v"`
-	R                *hexutil.Big      `json:"r"`
-	S                *hexutil.Big      `json:"s"`
+	BlockHash               *common.Hash      `json:"blockHash"`
+	BlockNumber             *hexutil.Big      `json:"blockNumber"`
+	From                    common.Address    `json:"from"`
+	Gas                     hexutil.Uint64    `json:"gas"`
+	GasPrice                *hexutil.Big      `json:"gasPrice"`
+	GasFeeCap               *hexutil.Big      `json:"maxFeePerGas,omitempty"`
+	GasTipCap               *hexutil.Big      `json:"maxPriorityFeePerGas,omitempty"`
+	Hash                    common.Hash       `json:"hash"`
+	Input                   hexutil.Bytes     `json:"input"`
+	Nonce                   hexutil.Uint64    `json:"nonce"`
+	To                      *common.Address   `json:"to"`
+	TransactionIndex        *hexutil.Uint64   `json:"transactionIndex"`
+	Value                   *hexutil.Big      `json:"value"`
+	Type                    hexutil.Uint64    `json:"type"`
+	Accesses                *types.AccessList `json:"accessList,omitempty"`
+	Reorganizations         *types.ReorgList  `json:"reorgList,omitempty"`
+	DataTypes               *types.DataTypes  `json:"dataTypes,omitempty"`
+	Stakeholders            *[]common.Address `json:"stakeholders,omitempty"`
+	ProposalNumber          *hexutil.Uint64   `json:"proposalnumber,omitempty"`
+	VotesNeededToWin        *hexutil.Uint64   `json:"votesneededtowin,omitempty"`
+	TimeOut                 *hexutil.Uint64   `json:"timeout,omitempty"`
+	VotesNeededToDeactivate *hexutil.Uint64   `json:"votesneededtodeactivate,omitempty"`
+	ChainID                 *hexutil.Big      `json:"chainId,omitempty"`
+	V                       *hexutil.Big      `json:"v"`
+	R                       *hexutil.Big      `json:"r"`
+	S                       *hexutil.Big      `json:"s"`
 }
 
 // newRPCTransaction returns a transaction that will serialize to the RPC
@@ -1394,12 +1412,16 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 		stkhldrs := tx.Stakeholders()
 		proposalNumber := tx.ProposalNumber()
 		votesNeededToWin := tx.VotesNeededToWin()
+		timeOut := tx.TimeOut()
+		votesNeededToDeactivate := tx.VotesNeededToDeactivate()
 		result.Accesses = &al
 		result.Reorganizations = &reogList
 		result.DataTypes = &dataTypes
 		result.Stakeholders = &stkhldrs
 		result.ProposalNumber = (*hexutil.Uint64)(&proposalNumber)
 		result.VotesNeededToWin = (*hexutil.Uint64)(&votesNeededToWin)
+		result.TimeOut = (*hexutil.Uint64)(&timeOut)
+		result.VotesNeededToDeactivate = (*hexutil.Uint64)(&votesNeededToDeactivate)
 		result.ChainID = (*hexutil.Big)(tx.ChainId())
 	case types.ApproveProposalTxType:
 		al := tx.AccessList()
@@ -1408,12 +1430,16 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 		stkhldrs := tx.Stakeholders()
 		proposalNumber := tx.ProposalNumber()
 		votesNeededToWin := tx.VotesNeededToWin()
+		timeOut := tx.TimeOut()
+		votesNeededToDeactivate := tx.VotesNeededToDeactivate()
 		result.Accesses = &al
 		result.Reorganizations = &reorgList
 		result.DataTypes = &dataTypes
 		result.Stakeholders = &stkhldrs
 		result.ProposalNumber = (*hexutil.Uint64)(&proposalNumber)
 		result.VotesNeededToWin = (*hexutil.Uint64)(&votesNeededToWin)
+		result.TimeOut = (*hexutil.Uint64)(&timeOut)
+		result.VotesNeededToDeactivate = (*hexutil.Uint64)(&votesNeededToDeactivate)
 		result.ChainID = (*hexutil.Big)(tx.ChainId())
 	case types.RejectProposalTxType:
 		al := tx.AccessList()
@@ -1422,12 +1448,16 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 		stkhldrs := tx.Stakeholders()
 		proposalNumber := tx.ProposalNumber()
 		votesNeededToWin := tx.VotesNeededToWin()
+		timeOut := tx.TimeOut()
+		votesNeededToDeactivate := tx.VotesNeededToDeactivate()
 		result.Accesses = &al
 		result.Reorganizations = &reorgList
 		result.DataTypes = &dataTypes
 		result.Stakeholders = &stkhldrs
 		result.ProposalNumber = (*hexutil.Uint64)(&proposalNumber)
 		result.VotesNeededToWin = (*hexutil.Uint64)(&votesNeededToWin)
+		result.TimeOut = (*hexutil.Uint64)(&timeOut)
+		result.VotesNeededToDeactivate = (*hexutil.Uint64)(&votesNeededToDeactivate)
 		result.ChainID = (*hexutil.Big)(tx.ChainId())
 	}
 	return result

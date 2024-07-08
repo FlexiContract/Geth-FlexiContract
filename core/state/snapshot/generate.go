@@ -576,15 +576,17 @@ func generateAccounts(ctx *generatorContext, dl *diskLayer, accMarker []byte) er
 		}
 		// Retrieve the current account and flatten it into the internal format
 		var acc struct {
-			Nonce            uint64
-			Balance          *big.Int
-			Root             common.Hash
-			ProposalRoot     common.Hash
-			BallotRoot       common.Hash
-			CodeHash         []byte
-			Stakeholders     []common.Address
-			ProposalNumber   uint64
-			VotesNeededToWin uint64
+			Nonce                   uint64
+			Balance                 *big.Int
+			Root                    common.Hash
+			ProposalRoot            common.Hash
+			BallotRoot              common.Hash
+			CodeHash                []byte
+			Stakeholders            []common.Address
+			ProposalNumber          uint64
+			VotesNeededToWin        uint64
+			VotesNeededToDeactivate uint64
+			TimeOut                 uint64
 		}
 		if err := rlp.DecodeBytes(val, &acc); err != nil {
 			log.Crit("Invalid account encountered during snapshot creation", "err", err)
@@ -601,7 +603,7 @@ func generateAccounts(ctx *generatorContext, dl *diskLayer, accMarker []byte) er
 				}
 				snapRecoveredAccountMeter.Mark(1)
 			} else {
-				data := SlimAccountRLP(acc.Nonce, acc.Balance, acc.Root, acc.ProposalRoot, acc.BallotRoot, acc.CodeHash, acc.Stakeholders, acc.ProposalNumber, acc.VotesNeededToWin)
+				data := SlimAccountRLP(acc.Nonce, acc.Balance, acc.Root, acc.ProposalRoot, acc.BallotRoot, acc.CodeHash, acc.Stakeholders, acc.ProposalNumber, acc.VotesNeededToWin, acc.VotesNeededToDeactivate, acc.TimeOut)
 				dataLen = len(data)
 				rawdb.WriteAccountSnapshot(ctx.batch, account, data)
 				snapGeneratedAccountMeter.Mark(1)

@@ -29,25 +29,29 @@ import (
 // or slim-snapshot format which replaces the empty root and code hash as nil
 // byte slice.
 type Account struct {
-	Nonce            uint64
-	Balance          *big.Int
-	Root             []byte
-	ProposalRoot     []byte
-	BallotRoot       []byte
-	CodeHash         []byte
-	Stakeholders     []common.Address
-	VotesNeededToWin uint64
-	ProposalNumber   uint64
+	Nonce                   uint64
+	Balance                 *big.Int
+	Root                    []byte
+	ProposalRoot            []byte
+	BallotRoot              []byte
+	CodeHash                []byte
+	Stakeholders            []common.Address
+	VotesNeededToWin        uint64
+	ProposalNumber          uint64
+	VotesNeededToDeactivate uint64
+	TimeOut                 uint64
 }
 
 // SlimAccount converts a state.Account content into a slim snapshot account
-func SlimAccount(nonce uint64, balance *big.Int, root common.Hash, proposalroot common.Hash, ballotroot common.Hash, codehash []byte, stakeholders []common.Address, proposalnumber uint64, votesneededtowin uint64) Account {
+func SlimAccount(nonce uint64, balance *big.Int, root common.Hash, proposalroot common.Hash, ballotroot common.Hash, codehash []byte, stakeholders []common.Address, proposalnumber uint64, votesneededtowin uint64, votesneededtodeactivate uint64, timeout uint64) Account {
 	slim := Account{
-		Nonce:            nonce,
-		Balance:          balance,
-		Stakeholders:     stakeholders,
-		ProposalNumber:   proposalnumber,
-		VotesNeededToWin: votesneededtowin,
+		Nonce:                   nonce,
+		Balance:                 balance,
+		Stakeholders:            stakeholders,
+		ProposalNumber:          proposalnumber,
+		VotesNeededToWin:        votesneededtowin,
+		VotesNeededToDeactivate: votesneededtodeactivate,
+		TimeOut:                 timeout,
 	}
 	if root != emptyRoot {
 		slim.Root = root[:]
@@ -66,8 +70,8 @@ func SlimAccount(nonce uint64, balance *big.Int, root common.Hash, proposalroot 
 
 // SlimAccountRLP converts a state.Account content into a slim snapshot
 // version RLP encoded.
-func SlimAccountRLP(nonce uint64, balance *big.Int, root common.Hash, proposalroot common.Hash, ballotroot common.Hash, codehash []byte, stakeholders []common.Address, proposalnumber uint64, votesneededtowin uint64) []byte {
-	data, err := rlp.EncodeToBytes(SlimAccount(nonce, balance, root, proposalroot, ballotroot, codehash, stakeholders, proposalnumber, votesneededtowin))
+func SlimAccountRLP(nonce uint64, balance *big.Int, root common.Hash, proposalroot common.Hash, ballotroot common.Hash, codehash []byte, stakeholders []common.Address, proposalnumber uint64, votesneededtowin uint64, votesneededtodeactivate uint64, timeout uint64) []byte {
+	data, err := rlp.EncodeToBytes(SlimAccount(nonce, balance, root, proposalroot, ballotroot, codehash, stakeholders, proposalnumber, votesneededtowin, votesneededtodeactivate, timeout))
 	if err != nil {
 		panic(err)
 	}

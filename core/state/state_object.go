@@ -370,7 +370,7 @@ func (s *stateObject) GetCommittedProposal(db Database, key common.Hash) types.P
 
 	if err != nil {
 		s.setError(err)
-		return types.Proposal{}
+		return types.Proposal{BlockNumber: new(big.Int)}
 	}
 
 	var value types.Proposal
@@ -628,7 +628,7 @@ func (s *stateObject) updateProposalTrie(db Database) Trie {
 		s.originProposal[key] = value
 
 		var v []byte
-		if (value.Equals(types.Proposal{})) {
+		if (value.Equals(types.Proposal{BlockNumber: new(big.Int)})) {
 
 			s.setError(tr.TryDelete(key[:]))
 
@@ -939,12 +939,36 @@ func (s *stateObject) SetVotesNeededToWin(number uint64) {
 	s.setVotesNeededToWin(number)
 }
 
+func (s *stateObject) SetVotesNeededToDeactivate(number uint64) {
+	s.db.journal.append(votesNeededToDeactivateChange{
+		account: &s.address,
+		prev:    s.data.VotesNeededToDeactivate,
+	})
+	s.setVotesNeededToDeactivate(number)
+}
+
+func (s *stateObject) SetTimeOut(number uint64) {
+	s.db.journal.append(timeOutChange{
+		account: &s.address,
+		prev:    s.data.TimeOut,
+	})
+	s.setTimeOut(number)
+}
+
 func (s *stateObject) setProposalNumber(number uint64) {
 	s.data.ProposalNumber = number
 }
 
 func (s *stateObject) setVotesNeededToWin(number uint64) {
 	s.data.VotesNeededTowin = number
+}
+
+func (s *stateObject) setVotesNeededToDeactivate(number uint64) {
+	s.data.VotesNeededToDeactivate = number
+}
+
+func (s *stateObject) setTimeOut(number uint64) {
+	s.data.TimeOut = number
 }
 
 func (s *stateObject) CodeHash() []byte {
@@ -969,6 +993,14 @@ func (s *stateObject) ProposalNumber() uint64 {
 
 func (s *stateObject) VotesNeededToWin() uint64 {
 	return s.data.VotesNeededTowin
+}
+
+func (s *stateObject) VotesNeededToDeactivate() uint64 {
+	return s.data.VotesNeededToDeactivate
+}
+
+func (s *stateObject) TimeOut() uint64 {
+	return s.data.TimeOut
 }
 
 // Value is never called, but must be present to allow stateObject to be used
